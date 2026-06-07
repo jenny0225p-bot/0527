@@ -187,15 +187,25 @@ function getGesture() {
   if (hands.length === 0) return "NONE";
   let hand = hands[0];
   let keypoints = hand.keypoints;
+
+  // 手指伸直基本狀態
   let thumbUp  = keypoints[4].y < keypoints[3].y;
   let indexUp  = keypoints[8].y < keypoints[6].y;
   let middleUp = keypoints[12].y < keypoints[10].y;
   let ringUp   = keypoints[16].y < keypoints[14].y;
   let pinkyUp  = keypoints[20].y < keypoints[18].y;
-  let palmSize = dist(keypoints[0].x, keypoints[0].y, keypoints[9].x, keypoints[9].y);
-  let thumbIsOut = dist(keypoints[4].x, keypoints[4].y, keypoints[5].x, keypoints[5].y) > palmSize * 0.8;
 
-  if (thumbUp && thumbIsOut && !indexUp && !middleUp && !ringUp && !pinkyUp) return "THUMBS_UP";
+  let palmSize = dist(keypoints[0].x, keypoints[0].y, keypoints[9].x, keypoints[9].y);
+  
+  // 優化比讚 (THUMBS_UP) 辨識：
+  // 1. 大拇指尖 (4) 高於拇指關節 (3)
+  // 2. 門檻值放寬至 0.65 以提升感應靈敏度
+  // 3. 其他四指 (8,12,16,20) 的 Y 座標必須低於手掌中心 (9) 的 Y 座標 (確保握拳)
+  let thumbIsOut = dist(keypoints[4].x, keypoints[4].y, keypoints[5].x, keypoints[5].y) > palmSize * 0.65;
+  let fingersFolded = keypoints[8].y > keypoints[9].y && keypoints[12].y > keypoints[9].y && keypoints[16].y > keypoints[9].y && keypoints[20].y > keypoints[9].y;
+
+  if (thumbUp && thumbIsOut && fingersFolded) return "THUMBS_UP";
+
   if (indexUp && pinkyUp && !middleUp && !ringUp) return "ROCK_ON";
   if (!indexUp && !middleUp && !ringUp && !pinkyUp) return "石頭";
   if (indexUp && middleUp && ringUp && pinkyUp) return "布";
@@ -1133,9 +1143,20 @@ function drawSkeleton() {
   if (hands.length > 0) {
     push();
     // 僅在角落視訊區顯示骨架（可選，或全螢幕顯示）
+    let gesture = getGesture();
     for (let hand of hands) {
       stroke(hand.handedness === "Left" ? '#ff00ff' : '#00f3ff');
       strokeWeight(2);
+
+      // 比讚視覺回饋：在指尖繪製動態發光圓圈
+      if (gesture === "THUMBS_UP") {
+        fill(57, 255, 20, 150);
+        noStroke();
+        drawingContext.shadowBlur = 15;
+        drawingContext.shadowColor = '#39ff14';
+        circle(hand.keypoints[4].x, hand.keypoints[4].y, 20);
+      }
+
       let parts = [[0,1,2,3,4],[5,6,7,8],[9,10,11,12],[13,14,15,16],[17,18,19,20],[0,5,9,13,17,0]];
       for (let part of parts) {
         for (let i = 0; i < part.length - 1; i++) {
